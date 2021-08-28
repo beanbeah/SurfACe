@@ -12,7 +12,7 @@
 
 void time_delay(uint8_t pin, int interval_in_seconds){
     digitalWrite(pin,HIGH);
-    delay(interval*1000);
+    delay(interval_in_seconds*1000);
     digitalWrite(pin,LOW);
   }
 
@@ -24,7 +24,7 @@ void motor_debug(uint8_t analog_pin, uint8_t digital_pin, int counts, bool rever
         analogWrite(analog_pin,0);
       }
     if (reverse){
-    digitalWrite(digital_pin,-1);
+    digitalWrite(digital_pin,0);
     for (int i =0; i<counts; i++){
         analogWrite(analog_pin, (1000/counts)*i);
         delay(1500);
@@ -54,8 +54,10 @@ void setup() {
     Serial.println("Testing Motor B");
     motor_debug(PWMB,DIRB,5,true);
     }
+ 
 }
 
 void loop() {
+  
 
 }
