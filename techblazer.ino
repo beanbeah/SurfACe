@@ -1,63 +1,88 @@
-#define PWMA 5
-#define DIRA 0
-#define PWMB 4
-#define DIRB 2
-#define UV D8
-#define IR1 D0
-#define IR2 D1
-#define IR3 D2
-#define IR4 D3
+#include <WiFi.h>
+const char* ssid     = "surfACe";
+const char* password = "surfACe";
+WiFiServer server(80);
+String header;
 
-#define DEBUG true
+void setup(){
 
-void time_delay(uint8_t pin, int interval_in_seconds){
-    digitalWrite(pin,HIGH);
-    delay(interval_in_seconds*1000);
-    digitalWrite(pin,LOW);
+
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+  server.begin();
   }
 
-void motor_debug(uint8_t analog_pin, uint8_t digital_pin, int counts, bool reverse){
-    digitalWrite(digital_pin,1);
-    for (int i =0; i<counts; i++){
-        analogWrite(analog_pin, (1000/counts)*i);
-        delay(1500);
-        analogWrite(analog_pin,0);
-      }
-    if (reverse){
-    digitalWrite(digital_pin,0);
-    for (int i =0; i<counts; i++){
-        analogWrite(analog_pin, (1000/counts)*i);
-        delay(1500);
-        analogWrite(analog_pin,0);
-      }
-     }
-  }
+void loop(){
+  WiFiClient client = server.available(); 
+  if (client){
+    String currentLine = "";  
+     while (client.connected()){
+        if (client.available()){
+            char c = client.read(); 
+            header += c;
+            if (c == '\n') {  
+              if (currentLine.length() == 0) {
+                client.println("HTTP/1.1 200 OK");
+                client.println("Content-type:text/html");
+                client.println("Connection: close");
+                client.println();
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(DIRA, OUTPUT);
-  pinMode(PWMA, OUTPUT); 
-  pinMode(DIRB, OUTPUT);
-  pinMode(PWMB, OUTPUT);  
-  pinMode(UV,OUTPUT);
-  pinMode(IR1,OUTPUT);
-  pinMode(IR2,OUTPUT);
-  pinMode(IR3,OUTPUT);
-  pinMode(IR4,OUTPUT);
-  
-  if (DEBUG){
-    Serial.println("Debug");
-    Serial.println("Testing UV for 10 seconds");
-    time_delay(UV,10);
-    Serial.println("Testing Motor A");
-    motor_debug(PWMA,DIRA,5,true);
-    Serial.println("Testing Motor B");
-    motor_debug(PWMB,DIRB,5,true);
+                if (header.indexOf("GET /start") >= 0){
+                    Serial.println("Start");
+
+                    client.println("<!DOCTYPE html><html>");
+                    client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+                    client.println("<link rel=\"icon\" href=\"data:,\">");
+                    client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
+                    client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
+                    client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+                    client.println(".button2 {background-color: #555555;}</style></head>");
+    
+                    client.println("<body><h1>surfACe</h1>");
+                    client.println("<p><a href=\"/stop\"><button class=\"button\">STOP</button></a></p>");
+                    client.println("</body></html>");
+                    client.println();
+
+                    while (header.indexOf("GET /stop") <0){
+                        //run program code
+                      }
+                    
+                  }
+
+                else if (header.indexOf("GET /debug") >=0){
+                    Serial.println("Debug")
+                    //debug
+                  }
+               else {
+
+                client.println("<!DOCTYPE html><html>");
+                client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+                client.println("<link rel=\"icon\" href=\"data:,\">");
+                client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
+                client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
+                client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+                client.println(".button2 {background-color: #555555;}</style></head>");
+
+                client.println("<body><h1>surfACe</h1>");
+                client.println("<p><a href=\"/start\"><button class=\"button\">START</button></a></p>");
+                client.println("<p><a href=\"/debug\"><button class=\"button\">DEBUG</button></a></p>");
+                client.println("</body></html>");
+                client.println();
+               }
+                break;
+              } else{
+                  currentLine = "";
+                } 
+            } else if (c != '\r') {
+                 currentLine += c;  
+              }
+           }
+        }
+        header = "";
+        client.stop();
+        Serial.println("Client disconnected.");
+        Serial.println("");  
     }
- 
-}
-
-void loop() {
-  
-
-}
+  }
