@@ -1,3 +1,9 @@
+#include <ESP8266WiFi.h>
+const char* ssid     = "surfACe";
+const char* password = "12345678";
+WiFiServer server(80);
+String header;
+
 #define PWMA 5
 #define DIRA 0
 #define PWMB 4
@@ -6,7 +12,7 @@
 #define FR_IR D0
 #define FL_IR D5
 #define BR_IR D6
-#define BL_IR D7
+#define BL_IR D7 
 #define MOVE_SPEED 50
 #define BRAKE_SPEED 15
 
@@ -31,7 +37,8 @@ void moveMotor(Motor motor, int speed) {
 
 //void get
 
-void setUV() {
+void setUV(bool state) {
+  digitalWrite(UV,state);
     
 }
 
@@ -55,27 +62,90 @@ enum State{
   TERMINATE
 };
 
-void setup() {
-  Serial.begin(115200);
-  
-  // Motor setup
-  Motor lMotor = {PWMB, DIRB, true};
+void movedebug(){
+    Motor lMotor = {PWMB, DIRB, true};
   Motor rMotor = {PWMA, DIRA, true};
   setupMotor(lMotor);
   setupMotor(rMotor);
+    digitalWrite(UV,HIGH);
+    delay(10000);
+    digitalWrite(UV,LOW);
+    moveMotor(lMotor, 50);
+    delay(2500);
+    moveMotor(lMotor, 0);
+    delay(1000);
+    moveMotor(rMotor, 50);
+    delay(2500);
+    moveMotor(rMotor, 0);
+    delay(1000);   
+  }
 
-  // uv and ir setup
-//  pinMode(UV,OUTPUT)
+
+
+bool lifted(){
+  return (digitalRead(FR_IR) && digitalRead(FL_IR) && digitalRead(BR_IR) && digitalRead(BL_IR));
+}
+
+
+void setup() {
+  Serial.begin(115200);
+
+
+
   pinMode(FL_IR, INPUT);
   pinMode(FR_IR, INPUT);
   pinMode(BL_IR, INPUT);
   pinMode(BR_IR, INPUT);
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+  server.begin();
+  
+}
 
-  //table code
-  int turnDir = -1;
-  enum State state = ON_TABLE;
-  while(true) {
-    switch(state) {
+void loop(){
+  WiFiClient client = server.available(); 
+  if (client){
+    String currentLine = "";  
+     while (client.connected()){
+        if (client.available()){
+            char c = client.read(); 
+            header += c;
+            if (c == '\n') {  
+              if (currentLine.length() == 0) {
+                client.println("HTTP/1.1 200 OK");
+                client.println("Content-type:text/html");
+                client.println("Connection: close");
+                client.println();
+
+                if (header.indexOf("GET /start") >= 0){
+                    Serial.println("Start");
+
+                    client.println("<!DOCTYPE html><html>");
+                    client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+                    client.println("<link rel=\"icon\" href=\"data:,\">");
+                    client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
+                    client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
+                    client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+                    client.println(".button2 {background-color: #555555;}</style></head>");
+    
+                    client.println("<body><h1>surfACe</h1>");
+                    client.println("<p><a href=\"/stop\"><button class=\"button\">STOP</button></a></p>");
+                    client.println("</body></html>");
+                    client.println();
+                      Motor lMotor = {PWMB, DIRB, true};
+                      Motor rMotor = {PWMA, DIRA, true};
+                      setupMotor(lMotor);
+                      setupMotor(rMotor);
+
+                    int turnDir = -1;
+                    enum State state = ON_TABLE;
+                    
+
+                    while (true){
+
+                          switch(state) {
       case ON_TABLE:
       {
         if(isOnFloor(FL_IR)) {
@@ -179,33 +249,44 @@ void setup() {
         break;
       }
     }
-    delay(5);
-  }
-}
-
-void loop() {
    
-}
+                          delay(5);
+                      }
 
-//void time_delay(uint8_t pin, int interval){
-//  digitalWrite(pin,HIGH);
-//  delay(interval*1000);
-//  digitalWrite(pin,LOW);
-//} 
+                  }
 
-//void motor_debug(uint8_t analog_pin, uint8_t digital_pin, int counts, bool reverse){
-//  digitalWrite(digital_pin,1);
-//  for (int i =0; i<counts; i++){
-//      analogWrite(analog_pin, (1000/counts)*i);
-//      delay(1MOVE_SPEED0);
-//      analogWrite(analog_pin,0);
-//    }
-//  if (reverse){
-//  digitalWrite(digital_pin,-1);
-//  for (int i =0; i<counts; i++){
-//      analogWrite(analog_pin, (1000/counts)*i);
-//      delay(1500);
-//      analogWrite(analog_pin,0);
-//    }
-//   }
-//}
+                else if (header.indexOf("GET /debug") >=0){
+                    Serial.println("Debug");
+                    movedebug();
+                  }
+               else {
+
+                client.println("<!DOCTYPE html><html>");
+                client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+                client.println("<link rel=\"icon\" href=\"data:,\">");
+                client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
+                client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
+                client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+                client.println(".button2 {background-color: #555555;}</style></head>");
+
+                client.println("<body><h1>surfACe</h1>");
+                client.println("<p><a href=\"/start\"><button class=\"button\">START</button></a></p>");
+                client.println("<p><a href=\"/debug\"><button class=\"button\">DEBUG</button></a></p>");
+                client.println("</body></html>");
+                client.println();
+               }
+                break;
+              } else{
+                  currentLine = "";
+                } 
+            } else if (c != '\r') {
+                 currentLine += c;  
+              }
+           }
+        }
+        header = "";
+        client.stop();
+        Serial.println("Client disconnected.");
+        Serial.println("");  
+    }
+  }
