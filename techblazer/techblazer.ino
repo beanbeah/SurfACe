@@ -8,12 +8,11 @@ String header;
 #define DIRA 0
 #define PWMB 4
 #define DIRB 2
-#define UV D8
-#define FR_IR D7
-#define FL_IR D0
-#define BR_IR D6
-#define BL_IR D5
-#define MOVE_SPEED 50
+#define UV D7
+#define FR_IR D8
+#define FL_IR D5
+#define BACK_IR D6
+#define MOVE_SPEED 50   
 #define BRAKE_SPEED 15
 
 #define DEBUG true
@@ -46,8 +45,7 @@ bool isOnFloor(uint8_t pin) {
 void debug() {
   Serial.print(isOnFloor(FL_IR));
   Serial.print(isOnFloor(FR_IR));
-  Serial.print(isOnFloor(BL_IR));
-  Serial.print(isOnFloor(BR_IR));
+  Serial.print(isOnFloor(BACK_IR));
   Serial.print("\n");
 }
 
@@ -60,7 +58,7 @@ enum State {
 };
 
 bool lifted() {
-  return (digitalRead(FR_IR) && digitalRead(FL_IR) && digitalRead(BR_IR) && digitalRead(BL_IR));
+  return (digitalRead(FR_IR) && digitalRead(FL_IR) && digitalRead(BACK_IR));
 }
 
 
@@ -68,8 +66,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(FL_IR, INPUT);
   pinMode(FR_IR, INPUT);
-  pinMode(BL_IR, INPUT);
-  pinMode(BR_IR, INPUT);
+  pinMode(BACK_IR, INPUT);
   pinMode(UV, OUTPUT);
   //  setUV(true);
   //  delay(10000);
@@ -80,16 +77,6 @@ void setup() {
   server.begin();
 }
 
-/**
-   TODO
-   1) May want to use a HTML File instead of spamming it here for code readability
-   2) Get start/stop button to actually work
-   3) Ensure Safety Features work (currently dont work)
-*/
-
-
-
-
 void loop() {
   Motor lMotor = {PWMB, DIRB, true};
   Motor rMotor = {PWMA, DIRA, false};
@@ -97,13 +84,18 @@ void loop() {
   setupMotor(rMotor);
 
   int turnDir = -1;
+  boolean tracking = false;
   enum State state = ON_TABLE;
   setUV(false);
 
   WiFiClient client = server.available();
   if (client) {
+    moveMotor(lMotor, 0);
+    moveMotor(rMotor, 0);
+    setUV(false);
+    
     String currentLine = "";
-    while (client.connected()) {
+    while(client.connected()) {
       Serial.println("Connected");
       if (client.available()) {
         char c = client.read();
@@ -121,12 +113,18 @@ void loop() {
               moveMotor(lMotor, 0);
               moveMotor(rMotor, 0);
               setUV(false);
+              tracking = false;
               //              movedebug();
             } else if (header.indexOf("GET /start") >= 0) {
               Serial.println("Start");
               client.println();
-              bool finished = false;
-              while (!finished) {
+              tracking = true;
+              while(tracking) {
+                Serial.println(state);
+                if(header.indexOf("GET /stop") >= 0) {
+                  state = TERMINATE;
+                  break;
+                }
                 if (lifted()) {
                   state = TERMINATE;
                 } else {
@@ -158,14 +156,14 @@ void loop() {
                       delay(500);
                       moveMotor(lMotor, 15);
                       moveMotor(rMotor, 15);
-
+          
                       // turn 90
                       moveMotor(lMotor, MOVE_SPEED * turnDir);
                       moveMotor(rMotor, -MOVE_SPEED * turnDir);
                       delay(910);
                       moveMotor(lMotor, -15 * turnDir);
                       moveMotor(rMotor, 15 * turnDir);
-
+          
                       // move fwd
                       moveMotor(lMotor, 50);
                       moveMotor(rMotor, 50);
@@ -182,7 +180,7 @@ void loop() {
                       }
                       moveMotor(lMotor, -15);
                       moveMotor(rMotor, -15);
-
+          
                       if (offTable) {
                         state = TERMINATION_LAP;
                         break;
@@ -205,14 +203,14 @@ void loop() {
                       delay(500);
                       moveMotor(lMotor, 15);
                       moveMotor(rMotor, 15);
-
+          
                       // turn 90
                       moveMotor(lMotor, MOVE_SPEED * turnDir);
                       moveMotor(rMotor, -MOVE_SPEED * turnDir);
                       delay(910);
                       moveMotor(lMotor, -15 * turnDir);
                       moveMotor(rMotor, 15 * turnDir);
-
+          
                       while (isOnFloor(FL_IR) || isOnFloor(FR_IR)) {
                         if (isOnFloor(FL_IR)) {
                           moveMotor(lMotor, MOVE_SPEED);
@@ -226,23 +224,24 @@ void loop() {
                         }
                         delay(5);
                       }
-                      finished = true;
+                      tracking = false;
                       //                          setUV(false);
                       state = TERMINATE;
                       break;
                     }
                   case TERMINATE:
                     {
-                      finished = true;
+                      tracking = false;
                       setUV(false);
                       moveMotor(lMotor, 0);
                       moveMotor(rMotor, 0);
                       break;
                     }
                 }
-
+          
                 delay(5);
               }
+              
 
             }
             client.println("<!DOCTYPE html><html>");
@@ -267,6 +266,7 @@ void loop() {
         }
       }
     }
+      
     header = "";
     client.stop();
     Serial.println("Client disconnected.");
