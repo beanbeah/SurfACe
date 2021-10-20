@@ -8,10 +8,10 @@ String header;
 #define DIRA 0
 #define PWMB 4
 #define DIRB 2
-#define UV D7
-#define FR_IR D8
-#define FL_IR D5
-#define BACK_IR D6
+#define UV D6
+#define FR_IR D7
+#define FL_IR D0
+#define BACK_IR D5
 #define MOVE_SPEED 50   
 #define BRAKE_SPEED 15
 
@@ -188,7 +188,7 @@ void loop() {
                         // turn 90
                         moveMotor(lMotor, MOVE_SPEED * turnDir);
                         moveMotor(rMotor, -MOVE_SPEED * turnDir);
-                        delay(870);
+                        delay(850);
                         moveMotor(lMotor, -15 * turnDir);
                         moveMotor(rMotor, 15 * turnDir);
                         state = ON_TABLE;
