@@ -115,7 +115,20 @@ void loop() {
               setUV(false);
               tracking = false;
               //              movedebug();
-            } else if (header.indexOf("GET /start") >= 0) {
+            } else if (header.indexOf("GET /spin") >=0){
+                setUV(true);
+                while(!lifted()){
+                moveMotor(lMotor,MOVE_SPEED);
+                moveMotor(rMotor, -MOVE_SPEED);
+                delay(2);
+              }
+                moveMotor(lMotor, 0);
+                moveMotor(rMotor, 0);
+                setUV(false);
+            }
+            
+            
+            else if (header.indexOf("GET /start") >= 0) {
               Serial.println("Start");
               client.println();
               tracking = true;
