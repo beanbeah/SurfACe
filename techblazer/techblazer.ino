@@ -1,9 +1,12 @@
 #include <ESP8266WiFi.h>
+
+//Constants
 const char* ssid     = "surfACe";
 const char* password = "12345678";
 WiFiServer server(80);
 String header;
 
+//ESP8266 Pins
 #define PWMA 5
 #define DIRA 0
 #define PWMB 4
@@ -15,40 +18,44 @@ String header;
 #define MOVE_SPEED 50   
 #define BRAKE_SPEED 15
 
-#define DEBUG true
+//Motor Class 
+class Motor {
+  private:
+    int pin, dirPin;
+    bool reversed;
 
-struct Motor {
-  const int PIN;
-  const int DIR_PIN;
-  const bool reversed;
+  public:
+    Motor(int pin, int dirPin, bool reversed){
+      this->pin = pin;
+      this->dirPin = dirPin;
+      this->reversed = reversed;
+    }
+
+    void init(){
+      pinMode(this->pin,OUTPUT);
+      pinMode(this->dirPin,OUTPUT);
+    }
+
+    void move(int speed){
+      //reverse motor speed if motor is reversed
+      if (this->reversed) speed = -speed;    
+      //set motor speed
+      digitalWrite(this->dirPin, speed > 0);
+      analogWrite(this->pin, abs(speed)); 
+    }
 };
 
-void setupMotor(Motor motor) {
-  pinMode(motor.PIN, OUTPUT);
-  pinMode(motor.DIR_PIN, OUTPUT);
-}
-
-void moveMotor(Motor motor, int speed) {
-  if (motor.reversed) speed = -speed;
-  digitalWrite(motor.DIR_PIN, speed >= 1);
-  analogWrite(motor.PIN, abs(speed));
-}
-
+//set UV-C Relay
 void setUV(bool state) {
   digitalWrite(UV, state);
 }
 
+//check if Surface is on surface
 bool isOnFloor(uint8_t pin) {
   return digitalRead(pin) == 0;
 }
 
-void debug() {
-  Serial.print(isOnFloor(FL_IR));
-  Serial.print(isOnFloor(FR_IR));
-  Serial.print(isOnFloor(BACK_IR));
-  Serial.print("\n");
-}
-
+//possible states Surface can be in
 enum State {
   ON_TABLE,
   OFF_TABLE,
@@ -57,19 +64,26 @@ enum State {
   TERMINATE
 };
 
+//check if surface has been lifted up or tilted
 bool lifted() {
   return (digitalRead(FR_IR) && digitalRead(FL_IR) && digitalRead(BACK_IR));
 }
 
+//DECLARE Motor Object
+Motor lMotor(PWMA, DIRA, true);
+Motor rMotor(PWMB, DIRB, false);
+
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200); //init debug Serial console
+  //declare pinmode
   pinMode(FL_IR, INPUT);
   pinMode(FR_IR, INPUT);
   pinMode(BACK_IR, INPUT);
   pinMode(UV, OUTPUT);
-  //  setUV(true);
-  //  delay(10000);
+  lMotor.init();
+  rMotor.init();
+  //init wireless IP
   WiFi.softAP(ssid, password);
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
@@ -78,11 +92,6 @@ void setup() {
 }
 
 void loop() {
-  Motor lMotor = {PWMB, DIRB, true};
-  Motor rMotor = {PWMA, DIRA, false};
-  setupMotor(lMotor);
-  setupMotor(rMotor);
-
   int turnDir = -1;
   boolean tracking = false;
   enum State state = ON_TABLE;
@@ -90,8 +99,8 @@ void loop() {
 
   WiFiClient client = server.available();
   if (client) {
-    moveMotor(lMotor, 0);
-    moveMotor(rMotor, 0);
+    lMotor.move(0);
+    rMotor.move(0);
     setUV(false);
     
     String currentLine = "";
@@ -110,24 +119,21 @@ void loop() {
 
             if (header.indexOf("GET /stop") >= 0) {
               Serial.println("Stop");
-              moveMotor(lMotor, 0);
-              moveMotor(rMotor, 0);
+              lMotor.move(0);
+              rMotor.move(0);
               setUV(false);
               tracking = false;
-              //              movedebug();
             } else if (header.indexOf("GET /spin") >=0){
                 setUV(true);
                 while(!lifted()){
-                moveMotor(lMotor,MOVE_SPEED);
-                moveMotor(rMotor, -MOVE_SPEED);
-                delay(2);
-              }
-                moveMotor(lMotor, 0);
-                moveMotor(rMotor, 0);
+                  lMotor.move(MOVE_SPEED);
+                  rMotor.move(MOVE_SPEED);
+                  delay(2);
+                }
+                lMotor.move(0);
+                rMotor.move(0);
                 setUV(false);
             }
-            
-            
             else if (header.indexOf("GET /start") >= 0) {
               Serial.println("Start");
               client.println();
@@ -147,14 +153,14 @@ void loop() {
                   case ON_TABLE:
                     {
                       if (isOnFloor(FL_IR)) {
-                        moveMotor(lMotor, MOVE_SPEED);
+                        lMotor.move(MOVE_SPEED);
                       } else {
-                        moveMotor(lMotor, 0);
+                        lMotor.move(0);
                       }
                       if (isOnFloor(FR_IR)) {
-                        moveMotor(rMotor, MOVE_SPEED);
+                        rMotor.move(MOVE_SPEED);
                       } else {
-                        moveMotor(rMotor, 0);
+                        rMotor.move(0);
                       }
                       delay(5);
                       if (!isOnFloor(FL_IR) && !isOnFloor(FR_IR)) state = OFF_TABLE;
@@ -164,23 +170,23 @@ void loop() {
                     {
                       turnDir = -turnDir;
                       // Reverse
-                      moveMotor(lMotor, -50);
-                      moveMotor(rMotor, -50);
+                      lMotor.move(-50);
+                      rMotor.move(-50);
                       delay(500);
-                      moveMotor(lMotor, 15);
-                      moveMotor(rMotor, 15);
+                      lMotor.move(15);
+                      rMotor.move(15);
           
                       // turn 90
-                      moveMotor(lMotor, MOVE_SPEED * turnDir);
-                      moveMotor(rMotor, -MOVE_SPEED * turnDir);
+                      lMotor.move(MOVE_SPEED * turnDir);
+                      rMotor.move(-MOVE_SPEED * turnDir);
                       delay(910);
-                      moveMotor(lMotor, -15 * turnDir);
-                      moveMotor(rMotor, 15 * turnDir);
+                      lMotor.move(-15 * turnDir);
+                      rMotor.move(15 * turnDir);
           
                       // move fwd
-                      moveMotor(lMotor, 50);
-                      moveMotor(rMotor, 50);
-                      //        delay(1000);
+                      lMotor.move(50);
+                      rMotor.move(50);
+
                       int i = 0;
                       bool offTable = false;
                       while (i < 1000) {
@@ -191,19 +197,19 @@ void loop() {
                         i += 5;
                         delay(5);
                       }
-                      moveMotor(lMotor, -15);
-                      moveMotor(rMotor, -15);
+                      lMotor.move(-15);
+                      rMotor.move(-15);
           
                       if (offTable) {
                         state = TERMINATION_LAP;
                         break;
                       } else {
                         // turn 90
-                        moveMotor(lMotor, MOVE_SPEED * turnDir);
-                        moveMotor(rMotor, -MOVE_SPEED * turnDir);
+                        lMotor.move(MOVE_SPEED * turnDir);
+                        rMotor.move(-MOVE_SPEED * turnDir);
                         delay(850);
-                        moveMotor(lMotor, -15 * turnDir);
-                        moveMotor(rMotor, 15 * turnDir);
+                        lMotor.move(-15 * turnDir);
+                        rMotor.move(15 * turnDir);
                         state = ON_TABLE;
                         break;
                       }
@@ -211,34 +217,33 @@ void loop() {
                   case TERMINATION_LAP:
                     {
                       // Reverse
-                      moveMotor(lMotor, -50);
-                      moveMotor(rMotor, -50);
+                      lMotor.move(-50);
+                      rMotor.move(-50);
                       delay(500);
-                      moveMotor(lMotor, 15);
-                      moveMotor(rMotor, 15);
+                      lMotor.move(15);
+                      rMotor.move(15);
           
                       // turn 90
-                      moveMotor(lMotor, MOVE_SPEED * turnDir);
-                      moveMotor(rMotor, -MOVE_SPEED * turnDir);
+                      lMotor.move(MOVE_SPEED * turnDir);
+                      rMotor.move(-MOVE_SPEED * turnDir);
                       delay(910);
-                      moveMotor(lMotor, -15 * turnDir);
-                      moveMotor(rMotor, 15 * turnDir);
+                      lMotor.move(-15 * turnDir);
+                      rMotor.move(15 * turnDir);
           
                       while (isOnFloor(FL_IR) || isOnFloor(FR_IR)) {
                         if (isOnFloor(FL_IR)) {
-                          moveMotor(lMotor, MOVE_SPEED);
+                          lMotor.move(MOVE_SPEED);
                         } else {
-                          moveMotor(lMotor, 0);
+                          lMotor.move(0);
                         }
                         if (isOnFloor(FR_IR)) {
-                          moveMotor(rMotor, MOVE_SPEED);
+                          rMotor.move(MOVE_SPEED);
                         } else {
-                          moveMotor(rMotor, 0);
+                          rMotor.move(0);
                         }
                         delay(5);
                       }
                       tracking = false;
-                      //                          setUV(false);
                       state = TERMINATE;
                       break;
                     }
@@ -246,8 +251,8 @@ void loop() {
                     {
                       tracking = false;
                       setUV(false);
-                      moveMotor(lMotor, 0);
-                      moveMotor(rMotor, 0);
+                      lMotor.move(0);
+                      rMotor.move(0);
                       break;
                     }
                 }
